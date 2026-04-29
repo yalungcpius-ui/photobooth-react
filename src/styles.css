@@ -1069,3 +1069,143 @@ input {
     min-height: 68dvh;
   }
 }
+
+/* Saved prints and post-capture picture editor */
+.print-actions-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.print-editor-panel {
+  overflow: hidden;
+}
+
+.print-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 420px);
+  gap: 18px;
+  align-items: start;
+}
+
+.print-editor-stage-wrap {
+  display: grid;
+  place-items: start center;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(15, 17, 23, 0.08);
+}
+
+.print-editor-stage {
+  position: relative;
+  width: min(100%, 460px);
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgba(15, 17, 23, 0.18);
+  touch-action: none;
+}
+
+.print-editor-base {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+.print-edit-element {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 1.5px dashed transparent;
+  border-radius: 18px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  overflow: hidden;
+  line-height: 1.08;
+}
+
+.print-edit-element.selected {
+  border-color: rgba(125, 135, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(125, 135, 255, 0.15);
+}
+
+.print-edit-emoji,
+.print-edit-icon {
+  padding: 0;
+  overflow: visible;
+  text-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+
+.print-resize-handle {
+  display: none;
+}
+
+.print-edit-element.selected .print-resize-handle {
+  display: block;
+}
+
+.print-editor-sidebar {
+  display: grid;
+  gap: 14px;
+}
+
+.emoji-picker-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.emoji-picker-row button {
+  font-size: 1.45rem;
+  padding: 8px;
+}
+
+.saved-print-list {
+  display: grid;
+  gap: 12px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.saved-print-card {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(15, 17, 23, 0.08);
+}
+
+.saved-print-card img {
+  width: 78px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.saved-print-card small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(15, 17, 23, 0.58);
+}
+
+@media (max-width: 1024px) {
+  .print-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .print-editor-stage {
+    width: min(100%, 420px);
+  }
+}

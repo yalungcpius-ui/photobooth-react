@@ -220,3 +220,23 @@ npm run tauri ios init
 ```
 
 That requires local Android/iOS tooling and should be done after the web/PWA version is stable.
+
+## Saved prints and post-capture editing
+
+This version adds a separate printed-picture editor after a strip is generated.
+
+New workflow:
+
+1. Capture photos as usual.
+2. Review the generated strip.
+3. Click **Save printed picture** to store the strip locally, or **Edit printed picture** to open the editor.
+4. In the editor you can add:
+   - speech/bubble text
+   - plain text
+   - emojis
+   - icon-style emoji badges
+   - filters such as warm, cool, black-and-white, vintage, and pop colour
+5. Save, download, or print the edited result.
+
+Saved prints are stored in browser `localStorage` and capped at the latest 30 prints. This is good for the MVP and kiosk testing. For production events, move saved prints to the Tauri filesystem, SQLite, or cloud storage so large image data is not limited by browser storage quotas.
+

@@ -3,14 +3,16 @@ import { CameraPanel } from './components/CameraPanel';
 import { ControlPanel } from './components/ControlPanel';
 import { CountdownOverlay } from './components/CountdownOverlay';
 import { PhotoStrip } from './components/PhotoStrip';
+import { PrintEditor } from './components/PrintEditor';
 import { useCamera } from './hooks/useCamera';
 import { useCountdown } from './hooks/useCountdown';
-import type { BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto } from './types';
+import type { BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto, PrintEditElement, PrintFilter, SavedPrintedPicture } from './types';
 import { captureFrame, downloadDataUrl } from './utils/capture';
 import { composePhotoStrip, createDefaultTemplateLayout, normalizeBoothSettings } from './utils/strip';
 
 const PRESET_STORAGE_KEY = 'photobooth-template-presets-v1';
 const KIOSK_STORAGE_KEY = 'photobooth-kiosk-settings-v1';
+const SAVED_PRINTS_STORAGE_KEY = 'photobooth-saved-prints-v1';
 
 const defaultKioskSettings: BoothKioskSettings = {
   enabled: false,
@@ -53,6 +55,8 @@ function App() {
   const [kioskSettings, setKioskSettings] = useState<BoothKioskSettings>(() => readKioskSettingsFromStorage());
   const [isKioskMode, setIsKioskMode] = useState(() => readKioskSettingsFromStorage().enabled);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [savedPrints, setSavedPrints] = useState<SavedPrintedPicture[]>(() => readSavedPrintsFromStorage());
+  const [editablePrintDataUrl, setEditablePrintDataUrl] = useState<string | null>(null);
   const [stripDataUrl, setStripDataUrl] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -73,12 +77,17 @@ function App() {
     writeKioskSettingsToStorage(kioskSettings);
   }, [kioskSettings]);
 
+  useEffect(() => {
+    writeSavedPrintsToStorage(savedPrints);
+  }, [savedPrints]);
+
   const shotsRemaining = useMemo(() => Math.max(settings.totalShots - photos.length, 0), [photos.length, settings.totalShots]);
 
   const resetSession = () => {
     clearCountdown();
     setPhotos([]);
     setStripDataUrl(null);
+    setEditablePrintDataUrl(null);
     setStep('preview');
   };
 
@@ -114,6 +123,7 @@ function App() {
     }
     setPhotos([]);
     setStripDataUrl(null);
+    setEditablePrintDataUrl(null);
     setStep('countdown');
     startCountdown(settings.countdownSeconds);
   };
@@ -380,6 +390,44 @@ function App() {
     setTimeout(() => setIsPrinting(false), 500);
   };
 
+  const openPrintEditor = () => {
+    if (!stripDataUrl) {
+      return;
+    }
+    setEditablePrintDataUrl(stripDataUrl);
+    setStep('edit-print');
+  };
+
+  const savePrintedPicture = (imageDataUrl: string, filter: PrintFilter = 'none', elements: PrintEditElement[] = []) => {
+    const now = new Date().toISOString();
+    setSavedPrints((current) => [
+      {
+        id: createId(),
+        name: 'photobooth-print-' + (current.length + 1),
+        imageDataUrl,
+        baseImageDataUrl: editablePrintDataUrl ?? stripDataUrl ?? imageDataUrl,
+        filter,
+        elements: structuredClone(elements),
+        createdAt: now
+      },
+      ...current
+    ].slice(0, 30));
+  };
+
+  const saveCurrentPrint = () => {
+    if (!stripDataUrl) {
+      return;
+    }
+    savePrintedPicture(stripDataUrl);
+  };
+
+  const deleteSavedPrint = (id: string) => {
+    setSavedPrints((current) => current.filter((print) => print.id !== id));
+  };
+
+  const loadSavedPrintForEditing = (print: SavedPrintedPicture) => {
+    setEditablePrintDataUrl(print.baseImageDataUrl || print.imageDataUrl);
+  };
   return (
     <main className={`app-shell ${isKioskMode ? 'kiosk-mode' : ''}`}>
       <header className="app-header">
@@ -455,23 +503,49 @@ function App() {
               ) : null}
             </section>
           ) : null}
-          <PhotoStrip
-            title={settings.stripTitle}
-            subtitle={settings.stripSubtitle}
-            stripDataUrl={stripDataUrl}
-            count={photos.length}
-            template={settings.template}
-            photos={photos}
-            totalShots={settings.totalShots}
-            activePresetName={presets.find((preset) => preset.id === activePresetId)?.name ?? null}
-            presetCount={presets.length}
-            onTemplateChange={(nextTemplate) => {
-              updateSettings({
-                ...settings,
-                template: nextTemplate
-              });
-            }}
-          />
+          {stripDataUrl && step !== 'edit-print' ? (
+            <section className="panel print-actions-panel">
+              <div>
+                <p className="eyebrow">Printed picture workflow</p>
+                <h2>Save or edit this print</h2>
+                <p className="helper-text">Save the final strip, or open the separate picture editor to add speech bubbles, emojis, icons and filters before printing.</p>
+              </div>
+              <div className="inline-actions wrap-actions">
+                <button type="button" className="primary" onClick={openPrintEditor}>Edit printed picture</button>
+                <button type="button" onClick={saveCurrentPrint}>Save printed picture</button>
+              </div>
+              <p className="helper-text">Saved prints: {savedPrints.length}</p>
+            </section>
+          ) : null}
+
+          {step === 'edit-print' && editablePrintDataUrl ? (
+            <PrintEditor
+              baseImageDataUrl={editablePrintDataUrl}
+              savedPrints={savedPrints}
+              onSaveEditedPrint={savePrintedPicture}
+              onClose={() => setStep('review')}
+              onLoadSavedPrint={loadSavedPrintForEditing}
+              onDeleteSavedPrint={deleteSavedPrint}
+            />
+          ) : (
+            <PhotoStrip
+              title={settings.stripTitle}
+              subtitle={settings.stripSubtitle}
+              stripDataUrl={stripDataUrl}
+              count={photos.length}
+              template={settings.template}
+              photos={photos}
+              totalShots={settings.totalShots}
+              activePresetName={presets.find((preset) => preset.id === activePresetId)?.name ?? null}
+              presetCount={presets.length}
+              onTemplateChange={(nextTemplate) => {
+                updateSettings({
+                  ...settings,
+                  template: nextTemplate
+                });
+              }}
+            />
+          )}
         </div>
       </section>
 
@@ -551,6 +625,29 @@ function normalizeKioskSettings(settings: Partial<BoothKioskSettings>): BoothKio
     autoReturnToCapture: settings.autoReturnToCapture ?? defaultKioskSettings.autoReturnToCapture,
     allowGuestRetake: settings.allowGuestRetake ?? defaultKioskSettings.allowGuestRetake
   };
+}
+
+function readSavedPrintsFromStorage(): SavedPrintedPicture[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+  const raw = window.localStorage.getItem(SAVED_PRINTS_STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as SavedPrintedPicture[];
+    return Array.isArray(parsed) ? parsed.filter((print) => print?.imageDataUrl && print?.id).slice(0, 30) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedPrintsToStorage(prints: SavedPrintedPicture[]) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(SAVED_PRINTS_STORAGE_KEY, JSON.stringify(prints.slice(0, 30)));
 }
 
 function sanitizeFileName(value: string) {

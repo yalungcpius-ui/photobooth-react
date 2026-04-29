@@ -1,4 +1,4 @@
-export type BoothStep = 'welcome' | 'preview' | 'countdown' | 'review';
+export type BoothStep = 'welcome' | 'preview' | 'countdown' | 'review' | 'edit-print';
 
 export interface LayoutRect {
   x: number;
@@ -105,4 +105,34 @@ export interface CapturedPhoto {
 export interface CameraDeviceOption {
   deviceId: string;
   label: string;
+}
+
+export type PrintFilter = 'none' | 'warm' | 'cool' | 'mono' | 'vintage' | 'pop';
+
+export interface PrintEditElement {
+  id: string;
+  kind: 'bubble' | 'emoji' | 'icon' | 'text';
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  color: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  fontSize: number;
+  fontWeight: number;
+  align: 'left' | 'center' | 'right';
+  hidden: boolean;
+}
+
+export interface SavedPrintedPicture {
+  id: string;
+  name: string;
+  imageDataUrl: string;
+  baseImageDataUrl: string;
+  filter: PrintFilter;
+  elements: PrintEditElement[];
+  createdAt: string;
 }
