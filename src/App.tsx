@@ -67,7 +67,7 @@ function App() {
 
   useEffect(() => {
     void startCamera();
-  }, [startCamera]);
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     writePresetsToStorage(presets);
