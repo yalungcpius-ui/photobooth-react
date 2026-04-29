@@ -4,10 +4,13 @@ import type { CameraDeviceOption } from '../types';
 interface CameraPanelProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   isReady: boolean;
+  isStarting: boolean;
+  hasCameraStarted: boolean;
   error: string | null;
   devices: CameraDeviceOption[];
   selectedDeviceId: string;
   facingMode: 'user' | 'environment';
+  onStartCamera: () => void;
   onDeviceChange: (deviceId: string) => void;
   onFacingModeChange: (mode: 'user' | 'environment') => void;
   onRefreshDevices: () => void;
@@ -16,10 +19,13 @@ interface CameraPanelProps {
 export function CameraPanel({
   videoRef,
   isReady,
+  isStarting,
+  hasCameraStarted,
   error,
   devices,
   selectedDeviceId,
   facingMode,
+  onStartCamera,
   onDeviceChange,
   onFacingModeChange,
   onRefreshDevices
@@ -29,7 +35,7 @@ export function CameraPanel({
       <div className="panel-row">
         <div>
           <h2>Live camera</h2>
-          <p className="helper-text">Pick a webcam, frame the shot, then run the capture sequence.</p>
+          <p className="helper-text">Tap start first, then pick a camera or lens. This is more reliable on iPad, iPhone and Android.</p>
         </div>
         <button type="button" className="ghost-button" onClick={onRefreshDevices}>
           Refresh cameras
@@ -39,7 +45,7 @@ export function CameraPanel({
       <div className="settings-grid camera-source-grid">
         <label className="field-group">
           Camera source
-          <select value={selectedDeviceId} onChange={(event) => onDeviceChange(event.target.value)}>
+          <select value={selectedDeviceId} onChange={(event) => onDeviceChange(event.target.value)} disabled={!hasCameraStarted && devices.length === 0}>
             <option value="">Auto camera</option>
             {devices.map((device) => (
               <option key={device.deviceId} value={device.deviceId}>
@@ -59,8 +65,20 @@ export function CameraPanel({
       </div>
 
       <div className="video-shell">
-        <video ref={videoRef} muted autoPlay playsInline className="camera-video" />
-        {!isReady && !error ? <div className="status-badge">Starting camera…</div> : null}
+        <video ref={videoRef} muted playsInline autoPlay className="camera-video" />
+        {!hasCameraStarted ? (
+          <button type="button" className="tap-to-start-overlay" onClick={onStartCamera}>
+            <span>Tap to Start Camera</span>
+            <small>Required on iPad/iPhone and safer for mobile browsers</small>
+          </button>
+        ) : null}
+        {hasCameraStarted && isStarting ? (
+          <div className="camera-loading-overlay">
+            <div className="spinner" aria-hidden="true" />
+            <span>Starting camera…</span>
+          </div>
+        ) : null}
+        {hasCameraStarted && !isStarting && !isReady && !error ? <div className="status-badge">Waiting for camera…</div> : null}
         {error ? <div className="status-badge error">{error}</div> : null}
       </div>
       <p className="helper-text">Tip: on iPad/phone, install the web demo to the home screen and use the lens selector for front or rear camera.</p>

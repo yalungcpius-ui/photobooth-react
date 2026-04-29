@@ -61,7 +61,7 @@ export function PhotoStrip({
   const previewHeight = 760;
   const previewWidth = Math.max(280, (dimensions.width / dimensions.height) * previewHeight);
   const normalizedTemplate = useMemo(
-    () => normalizeBoothSettings({ totalShots, countdownSeconds: 3, stripTitle: title, stripSubtitle: subtitle, template }).template,
+    () => normalizeBoothSettings({ totalShots, countdownSeconds: 3, printDecisionMode: 'ask', stripTitle: title, stripSubtitle: subtitle, template }).template,
     [template, title, subtitle, totalShots]
   );
   const { layout } = normalizedTemplate;
@@ -139,7 +139,7 @@ export function PhotoStrip({
 
   const commitTemplate = (nextTemplate: BoothTemplateSettings) => {
     onTemplateChange(
-      normalizeBoothSettings({ totalShots, countdownSeconds: 3, stripTitle: title, stripSubtitle: subtitle, template: nextTemplate }).template
+      normalizeBoothSettings({ totalShots, countdownSeconds: 3, printDecisionMode: 'ask', stripTitle: title, stripSubtitle: subtitle, template: nextTemplate }).template
     );
   };
 

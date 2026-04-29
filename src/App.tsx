@@ -4,15 +4,35 @@ import { ControlPanel } from './components/ControlPanel';
 import { CountdownOverlay } from './components/CountdownOverlay';
 import { PhotoStrip } from './components/PhotoStrip';
 import { PrintEditor } from './components/PrintEditor';
+import { AdminIntegrationsPanel } from './components/AdminIntegrationsPanel';
+import { GalleryHistory } from './components/GalleryHistory';
 import { useCamera } from './hooks/useCamera';
 import { useCountdown } from './hooks/useCountdown';
-import type { BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto, PrintEditElement, PrintFilter, SavedPrintedPicture } from './types';
+import type { AppMode, BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto, PrintEditElement, PrintFilter, SavedPrintedPicture, PrinterProfile, DslrSettings, CloudSyncSettings } from './types';
 import { captureFrame, downloadDataUrl } from './utils/capture';
 import { composePhotoStrip, createDefaultTemplateLayout, normalizeBoothSettings } from './utils/strip';
+import { browserPrint, silentPrint } from './services';
 
 const PRESET_STORAGE_KEY = 'photobooth-template-presets-v1';
 const KIOSK_STORAGE_KEY = 'photobooth-kiosk-settings-v1';
 const SAVED_PRINTS_STORAGE_KEY = 'photobooth-saved-prints-v1';
+const PRINTER_PROFILES_STORAGE_KEY = 'photobooth-printer-profiles-v1';
+const SELECTED_PRINTER_PROFILE_KEY = 'photobooth-selected-printer-profile-v1';
+const DSLR_STORAGE_KEY = 'photobooth-dslr-settings-v1';
+const CLOUD_SYNC_STORAGE_KEY = 'photobooth-cloud-sync-settings-v1';
+
+const defaultPrinterProfile: PrinterProfile = {
+  id: 'default-printer',
+  name: 'Default browser printer',
+  printerName: '',
+  paperSize: '4x6',
+  orientation: 'portrait',
+  copies: 1,
+  silentPrinting: false,
+  autoSaveBeforePrint: true
+};
+const defaultDslrSettings: DslrSettings = { enabled: false, provider: 'none', cameraName: '', watchFolder: '', autoImportLatest: false };
+const defaultCloudSyncSettings: CloudSyncSettings = { enabled: false, endpointUrl: '', apiKey: '', deviceId: 'booth-local', autoSyncPresets: false, enablePrintUpload: false };
 
 const defaultKioskSettings: BoothKioskSettings = {
   enabled: false,
@@ -25,6 +45,7 @@ const defaultKioskSettings: BoothKioskSettings = {
 const defaultSettings: BoothSettings = {
   totalShots: 4,
   countdownSeconds: 3,
+  printDecisionMode: 'ask',
   stripTitle: 'Pius PhotoBooth',
   stripSubtitle: 'Custom event template',
   template: {
@@ -48,6 +69,7 @@ const defaultSettings: BoothSettings = {
 };
 
 function App() {
+  const [appMode, setAppMode] = useState<AppMode>('configuration');
   const [step, setStep] = useState<BoothStep>('welcome');
   const [settings, setSettings] = useState<BoothSettings>(() => normalizeBoothSettings(defaultSettings));
   const [presets, setPresets] = useState<BoothTemplatePreset[]>(() => readPresetsFromStorage());
@@ -56,18 +78,20 @@ function App() {
   const [isKioskMode, setIsKioskMode] = useState(() => readKioskSettingsFromStorage().enabled);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [savedPrints, setSavedPrints] = useState<SavedPrintedPicture[]>(() => readSavedPrintsFromStorage());
+  const [printerProfiles, setPrinterProfiles] = useState<PrinterProfile[]>(() => readPrinterProfilesFromStorage());
+  const [selectedPrinterProfileId, setSelectedPrinterProfileId] = useState<string | null>(() => window.localStorage.getItem(SELECTED_PRINTER_PROFILE_KEY) || defaultPrinterProfile.id);
+  const [dslrSettings, setDslrSettings] = useState<DslrSettings>(() => readDslrSettingsFromStorage());
+  const [cloudSyncSettings, setCloudSyncSettings] = useState<CloudSyncSettings>(() => readCloudSyncSettingsFromStorage());
   const [editablePrintDataUrl, setEditablePrintDataUrl] = useState<string | null>(null);
   const [stripDataUrl, setStripDataUrl] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [hasCameraStarted, setHasCameraStarted] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const { isReady, error, devices, selectedDeviceId, facingMode, setSelectedDeviceId, setFacingMode, refreshDevices, startCamera } = useCamera(videoRef);
+  const { isReady, isStarting, error, devices, selectedDeviceId, facingMode, setSelectedDeviceId, setFacingMode, refreshDevices, startCamera } = useCamera(videoRef);
   const { countdown, startCountdown, clearCountdown } = useCountdown();
 
-  useEffect(() => {
-    void startCamera();
-  }, [selectedDeviceId, facingMode]);
 
   useEffect(() => {
     writePresetsToStorage(presets);
@@ -80,6 +104,10 @@ function App() {
   useEffect(() => {
     writeSavedPrintsToStorage(savedPrints);
   }, [savedPrints]);
+  useEffect(() => { writePrinterProfilesToStorage(printerProfiles); }, [printerProfiles]);
+  useEffect(() => { if (selectedPrinterProfileId) window.localStorage.setItem(SELECTED_PRINTER_PROFILE_KEY, selectedPrinterProfileId); }, [selectedPrinterProfileId]);
+  useEffect(() => { writeDslrSettingsToStorage(dslrSettings); }, [dslrSettings]);
+  useEffect(() => { writeCloudSyncSettingsToStorage(cloudSyncSettings); }, [cloudSyncSettings]);
 
   const shotsRemaining = useMemo(() => Math.max(settings.totalShots - photos.length, 0), [photos.length, settings.totalShots]);
 
@@ -89,6 +117,7 @@ function App() {
     setStripDataUrl(null);
     setEditablePrintDataUrl(null);
     setStep('preview');
+    setAppMode('photobooth');
   };
 
   const updateSettings = (next: BoothSettings) => {
@@ -118,6 +147,7 @@ function App() {
   };
 
   const triggerCaptureSequence = () => {
+    setAppMode('photobooth');
     if (!isReady) {
       return;
     }
@@ -177,6 +207,13 @@ function App() {
   }, [photos, settings]);
 
   useEffect(() => {
+    if (step === 'review' && stripDataUrl && appMode === 'photobooth') {
+      setEditablePrintDataUrl(stripDataUrl);
+      setStep('edit-print');
+    }
+  }, [appMode, step, stripDataUrl]);
+
+  useEffect(() => {
     if (!isKioskMode || !kioskSettings.autoReturnToCapture || step !== 'review') {
       return;
     }
@@ -188,20 +225,31 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [isKioskMode, kioskSettings.autoReturnToCapture, kioskSettings.idleResetSeconds, step]);
 
+  const handleStartCamera = async () => {
+    setHasCameraStarted(true);
+    await startCamera(selectedDeviceId, facingMode);
+  };
+
   const handleDeviceChange = async (deviceId: string) => {
     setSelectedDeviceId(deviceId);
-    await startCamera(deviceId);
+    if (hasCameraStarted) {
+      await startCamera(deviceId, facingMode);
+    }
   };
 
   const handleRefreshDevices = async () => {
     await refreshDevices();
-    await startCamera(selectedDeviceId);
+    if (hasCameraStarted) {
+      await startCamera(selectedDeviceId, facingMode);
+    }
   };
 
   const handleFacingModeChange = async (mode: 'user' | 'environment') => {
     setSelectedDeviceId('');
     setFacingMode(mode);
-    await startCamera('', mode);
+    if (hasCameraStarted) {
+      await startCamera('', mode);
+    }
   };
 
   const handleTemplateImageUpload = async (file: File | null) => {
@@ -352,42 +400,13 @@ function App() {
   };
 
   const printStrip = () => {
-    if (!stripDataUrl || isPrinting) {
-      return;
-    }
-
+    if (!stripDataUrl || isPrinting) return;
+    const profile = printerProfiles.find((entry) => entry.id === selectedPrinterProfileId) ?? printerProfiles[0] ?? defaultPrinterProfile;
+    if (profile.autoSaveBeforePrint) savePrintedPicture(stripDataUrl);
     setIsPrinting(true);
-    const popup = window.open('', '_blank', 'width=1100,height=900');
-    if (!popup) {
-      setIsPrinting(false);
-      return;
-    }
-
-    popup.document.write(`<!doctype html>
-<html>
-  <head>
-    <title>Print Photo Strip</title>
-    <style>
-      body { margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f5f1ea; }
-      img { max-width: 92vw; max-height: 96vh; object-fit: contain; }
-      @media print {
-        body { background: white; }
-        img { max-width: 100%; max-height: none; width: 100%; }
-      }
-    </style>
-  </head>
-  <body>
-    <img src="${stripDataUrl}" alt="Photo strip" />
-    <script>
-      window.onload = () => {
-        window.print();
-        setTimeout(() => window.close(), 300);
-      };
-    </script>
-  </body>
-</html>`);
-    popup.document.close();
-    setTimeout(() => setIsPrinting(false), 500);
+    void silentPrint(stripDataUrl, profile)
+      .catch(() => browserPrint(stripDataUrl, profile.name))
+      .finally(() => setIsPrinting(false));
   };
 
   const openPrintEditor = () => {
@@ -396,6 +415,7 @@ function App() {
     }
     setEditablePrintDataUrl(stripDataUrl);
     setStep('edit-print');
+    setAppMode('photobooth');
   };
 
   const savePrintedPicture = (imageDataUrl: string, filter: PrintFilter = 'none', elements: PrintEditElement[] = []) => {
@@ -412,6 +432,14 @@ function App() {
       },
       ...current
     ].slice(0, 30));
+
+    if (settings.printDecisionMode === 'auto') {
+      const profile = printerProfiles.find((entry) => entry.id === selectedPrinterProfileId) ?? printerProfiles[0] ?? defaultPrinterProfile;
+      setIsPrinting(true);
+      void silentPrint(imageDataUrl, profile)
+        .catch(() => browserPrint(imageDataUrl, profile.name))
+        .finally(() => setIsPrinting(false));
+    }
   };
 
   const saveCurrentPrint = () => {
@@ -427,107 +455,101 @@ function App() {
 
   const loadSavedPrintForEditing = (print: SavedPrintedPicture) => {
     setEditablePrintDataUrl(print.baseImageDataUrl || print.imageDataUrl);
+    setStep('edit-print');
+    setAppMode('photobooth');
+  };
+
+  const importPresetLibrary = (incoming: BoothTemplatePreset[]) => {
+    setPresets((current) => {
+      const byName = new Map(current.map((preset) => [preset.name.toLowerCase(), preset]));
+      for (const preset of incoming) byName.set(preset.name.toLowerCase(), { ...preset, id: preset.id || createId(), settings: normalizeBoothSettings(preset.settings), updatedAt: preset.updatedAt || new Date().toISOString(), createdAt: preset.createdAt || new Date().toISOString() });
+      return Array.from(byName.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    });
   };
   return (
-    <main className={`app-shell ${isKioskMode ? 'kiosk-mode' : ''}`}>
+    <main className={`app-shell segmented-flow ${isKioskMode ? 'kiosk-mode' : ''}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">React + Tauri starter</p>
           <h1>PhotoBooth</h1>
+          <p className="helper-text">Setup first, design next, then run the booth. Guests only decorate the finished print.</p>
         </div>
         <div className="header-status">
-          <span className={`pill ${isReady ? 'live' : ''}`}>{isReady ? 'Camera ready' : 'Camera starting'}</span>
+          {appMode === 'photobooth' ? <span className={`pill ${isReady ? 'live' : ''}`}>{isReady ? 'Camera ready' : hasCameraStarted ? 'Camera starting' : 'Camera off'}</span> : null}
           <span className="pill">{shotsRemaining} shots remaining</span>
           {isKioskMode ? (
-            <button type="button" className="ghost-button admin-exit-button" onClick={exitKioskMode}>
-              Admin unlock
-            </button>
+            <button type="button" className="ghost-button admin-exit-button" onClick={exitKioskMode}>Admin unlock</button>
           ) : null}
         </div>
       </header>
 
-      <section className="app-grid">
-        <div className="left-column">
-          <CameraPanel
-            videoRef={videoRef}
-            isReady={isReady}
-            error={error}
-            devices={devices}
-            selectedDeviceId={selectedDeviceId}
-            facingMode={facingMode}
-            onDeviceChange={handleDeviceChange}
-            onFacingModeChange={handleFacingModeChange}
-            onRefreshDevices={handleRefreshDevices}
-          />
-          <CountdownOverlay value={countdown} />
-        </div>
+      <nav className="workflow-tabs" aria-label="PhotoBooth workflow">
+        <button type="button" className={appMode === 'configuration' ? 'active' : ''} onClick={() => setAppMode('configuration')}>1. Configuration</button>
+        <button type="button" className={appMode === 'designer' ? 'active' : ''} onClick={() => setAppMode('designer')}>2. Designer</button>
+        <button type="button" className={appMode === 'photobooth' ? 'active' : ''} onClick={() => setAppMode('photobooth')}>3. Photobooth mode</button>
+      </nav>
 
-        <div className="right-column">
-          <ControlPanel
-            step={step}
-            shotsTaken={photos.length}
-            settings={settings}
-            presets={presets}
-            activePresetId={activePresetId}
-            onSettingsChange={updateSettings}
-            onStartSession={triggerCaptureSequence}
-            onRetake={resetSession}
-            onDownloadAll={downloadAll}
-            onDownloadStrip={downloadStrip}
-            onPrintStrip={printStrip}
-            onTemplateImageUpload={handleTemplateImageUpload}
-            onClearTemplateImage={clearTemplateImage}
-            onSavePreset={savePreset}
-            onLoadPreset={loadPreset}
-            onDeletePreset={deletePreset}
-            onExportPreset={exportPreset}
-            onImportPreset={(file) => {
-              void importPreset(file);
-            }}
-            onResetTemplateDefaults={resetTemplateDefaults}
-            kioskSettings={kioskSettings}
-            isKioskMode={isKioskMode}
-            onKioskSettingsChange={updateKioskSettings}
-            onEnterKioskMode={enterKioskMode}
-            onExitKioskMode={exitKioskMode}
-          />
-          {isKioskMode ? (
-            <section className="panel kiosk-actions-panel">
-              <button className="primary kiosk-start-button" onClick={triggerCaptureSequence} disabled={!isReady || step === 'countdown'}>
-                {step === 'review' ? 'Take another set' : 'Tap to start'}
-              </button>
-              {kioskSettings.allowGuestRetake ? (
-                <button onClick={resetSession} disabled={photos.length === 0 && step !== 'review'}>
-                  Retake
-                </button>
-              ) : null}
-            </section>
-          ) : null}
-          {stripDataUrl && step !== 'edit-print' ? (
-            <section className="panel print-actions-panel">
-              <div>
-                <p className="eyebrow">Printed picture workflow</p>
-                <h2>Save or edit this print</h2>
-                <p className="helper-text">Save the final strip, or open the separate picture editor to add speech bubbles, emojis, icons and filters before printing.</p>
+      {appMode === 'configuration' ? (
+        <section className="workflow-screen two-column-screen">
+          <div className="left-column">
+            <section className="panel flow-intro-panel">
+              <p className="eyebrow">Step 1</p>
+              <h2>Setup or load a configuration</h2>
+              <p className="helper-text">Choose the preset, session count, countdown, kiosk options, printer behaviour and integrations before designing or testing the booth.</p>
+              <div className="flow-next-actions">
+                <button type="button" className="primary" onClick={() => setAppMode('designer')}>Continue to designer</button>
+                <button type="button" onClick={() => setAppMode('photobooth')}>Skip to photobooth test</button>
               </div>
-              <div className="inline-actions wrap-actions">
-                <button type="button" className="primary" onClick={openPrintEditor}>Edit printed picture</button>
-                <button type="button" onClick={saveCurrentPrint}>Save printed picture</button>
-              </div>
-              <p className="helper-text">Saved prints: {savedPrints.length}</p>
             </section>
-          ) : null}
-
-          {step === 'edit-print' && editablePrintDataUrl ? (
-            <PrintEditor
-              baseImageDataUrl={editablePrintDataUrl}
-              savedPrints={savedPrints}
-              onSaveEditedPrint={savePrintedPicture}
-              onClose={() => setStep('review')}
-              onLoadSavedPrint={loadSavedPrintForEditing}
-              onDeleteSavedPrint={deleteSavedPrint}
+            <GalleryHistory savedPrints={savedPrints} cloudSyncSettings={cloudSyncSettings} onEdit={loadSavedPrintForEditing} onDelete={deleteSavedPrint} />
+          </div>
+          <div className="right-column">
+            <ControlPanel
+              mode="configuration"
+              step={step}
+              shotsTaken={photos.length}
+              settings={settings}
+              presets={presets}
+              activePresetId={activePresetId}
+              onSettingsChange={updateSettings}
+              onStartSession={triggerCaptureSequence}
+              onRetake={resetSession}
+              onDownloadAll={downloadAll}
+              onDownloadStrip={downloadStrip}
+              onPrintStrip={printStrip}
+              onTemplateImageUpload={handleTemplateImageUpload}
+              onClearTemplateImage={clearTemplateImage}
+              onSavePreset={savePreset}
+              onLoadPreset={loadPreset}
+              onDeletePreset={deletePreset}
+              onExportPreset={exportPreset}
+              onImportPreset={(file) => { void importPreset(file); }}
+              onResetTemplateDefaults={resetTemplateDefaults}
+              kioskSettings={kioskSettings}
+              isKioskMode={isKioskMode}
+              onKioskSettingsChange={updateKioskSettings}
+              onEnterKioskMode={enterKioskMode}
+              onExitKioskMode={exitKioskMode}
             />
-          ) : (
+            <AdminIntegrationsPanel
+              printerProfiles={printerProfiles}
+              selectedPrinterProfileId={selectedPrinterProfileId}
+              dslrSettings={dslrSettings}
+              cloudSyncSettings={cloudSyncSettings}
+              presets={presets}
+              onPrinterProfilesChange={setPrinterProfiles}
+              onSelectedPrinterProfileChange={setSelectedPrinterProfileId}
+              onDslrSettingsChange={setDslrSettings}
+              onCloudSyncSettingsChange={setCloudSyncSettings}
+              onImportPresets={importPresetLibrary}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {appMode === 'designer' ? (
+        <section className="workflow-screen two-column-screen designer-screen">
+          <div className="left-column designer-preview-column">
             <PhotoStrip
               title={settings.stripTitle}
               subtitle={settings.stripSubtitle}
@@ -538,20 +560,137 @@ function App() {
               totalShots={settings.totalShots}
               activePresetName={presets.find((preset) => preset.id === activePresetId)?.name ?? null}
               presetCount={presets.length}
-              onTemplateChange={(nextTemplate) => {
-                updateSettings({
-                  ...settings,
-                  template: nextTemplate
-                });
-              }}
+              onTemplateChange={(nextTemplate) => updateSettings({ ...settings, template: nextTemplate })}
             />
-          )}
-        </div>
-      </section>
+          </div>
+          <div className="right-column">
+            <section className="panel flow-intro-panel">
+              <p className="eyebrow">Step 2</p>
+              <h2>Design the template layout</h2>
+              <p className="helper-text">This is the only screen where layout can be changed. Move photo slots, resize frames, add brand elements and save the design as a preset.</p>
+              <div className="flow-next-actions">
+                <button type="button" className="primary" onClick={() => setAppMode('photobooth')}>Start photobooth test</button>
+                <button type="button" onClick={() => setAppMode('configuration')}>Back to configuration</button>
+              </div>
+            </section>
+            <ControlPanel
+              mode="designer"
+              step={step}
+              shotsTaken={photos.length}
+              settings={settings}
+              presets={presets}
+              activePresetId={activePresetId}
+              onSettingsChange={updateSettings}
+              onStartSession={triggerCaptureSequence}
+              onRetake={resetSession}
+              onDownloadAll={downloadAll}
+              onDownloadStrip={downloadStrip}
+              onPrintStrip={printStrip}
+              onTemplateImageUpload={handleTemplateImageUpload}
+              onClearTemplateImage={clearTemplateImage}
+              onSavePreset={savePreset}
+              onLoadPreset={loadPreset}
+              onDeletePreset={deletePreset}
+              onExportPreset={exportPreset}
+              onImportPreset={(file) => { void importPreset(file); }}
+              onResetTemplateDefaults={resetTemplateDefaults}
+              kioskSettings={kioskSettings}
+              isKioskMode={isKioskMode}
+              onKioskSettingsChange={updateKioskSettings}
+              onEnterKioskMode={enterKioskMode}
+              onExitKioskMode={exitKioskMode}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {appMode === 'photobooth' ? (
+        <section className="workflow-screen two-column-screen booth-screen">
+          <div className="left-column">
+            {step === 'edit-print' && editablePrintDataUrl ? (
+              <PrintEditor
+                baseImageDataUrl={editablePrintDataUrl}
+                savedPrints={savedPrints}
+                onSaveEditedPrint={savePrintedPicture}
+                onClose={() => setStep('review')}
+                onLoadSavedPrint={loadSavedPrintForEditing}
+                onDeleteSavedPrint={deleteSavedPrint}
+              />
+            ) : (
+              <>
+                <CameraPanel
+                  videoRef={videoRef}
+                  isReady={isReady}
+                  isStarting={isStarting}
+                  hasCameraStarted={hasCameraStarted}
+                  error={error}
+                  devices={devices}
+                  selectedDeviceId={selectedDeviceId}
+                  facingMode={facingMode}
+                  onStartCamera={handleStartCamera}
+                  onDeviceChange={handleDeviceChange}
+                  onFacingModeChange={handleFacingModeChange}
+                  onRefreshDevices={handleRefreshDevices}
+                />
+                <CountdownOverlay value={countdown} />
+              </>
+            )}
+          </div>
+
+          <div className="right-column">
+            <section className="panel flow-intro-panel">
+              <p className="eyebrow">Step 3</p>
+              <h2>{step === 'edit-print' ? 'Decorate the finished print' : 'Photobooth mode'}</h2>
+              <p className="helper-text">
+                {step === 'edit-print'
+                  ? 'The template layout is locked here. Guests can only add text, bubbles, emojis, icons and filters to the finished print.'
+                  : 'Test the booth with the selected configuration and template. After capture, the app opens the decoration screen automatically.'}
+              </p>
+              <div className="flow-next-actions">
+                <button className="primary" onClick={triggerCaptureSequence} disabled={!isReady || step === 'countdown'}>{step === 'edit-print' || step === 'review' ? 'Take another set' : 'Start capture'}</button>
+                <button onClick={resetSession} disabled={photos.length === 0 && step !== 'review' && step !== 'edit-print'}>Reset session</button>
+                <button type="button" onClick={() => setAppMode('designer')}>Back to layout designer</button>
+              </div>
+            </section>
+
+            {stripDataUrl ? (
+              <section className="panel print-actions-panel">
+                <div>
+                  <p className="eyebrow">Print decision</p>
+                  <h2>{settings.printDecisionMode === 'auto' ? 'Auto-print is enabled' : 'Ask before printing'}</h2>
+                  <p className="helper-text">Printing behaviour is configured on the Configuration screen. The finished print is saved before printing when the selected printer profile requires it.</p>
+                </div>
+                <div className="inline-actions wrap-actions">
+                  <button type="button" className="primary" onClick={openPrintEditor}>Decorate print</button>
+                  <button type="button" onClick={saveCurrentPrint}>Save printed picture</button>
+                  <button type="button" onClick={printStrip} disabled={isPrinting}>{isPrinting ? 'Printing...' : 'Print now'}</button>
+                  <button type="button" onClick={downloadStrip}>Download strip</button>
+                </div>
+              </section>
+            ) : null}
+
+            {step !== 'edit-print' ? (
+              <PhotoStrip
+                title={settings.stripTitle}
+                subtitle={settings.stripSubtitle}
+                stripDataUrl={stripDataUrl}
+                count={photos.length}
+                template={settings.template}
+                photos={photos}
+                totalShots={settings.totalShots}
+                activePresetName={presets.find((preset) => preset.id === activePresetId)?.name ?? null}
+                presetCount={presets.length}
+                onTemplateChange={() => { /* Layout editing is intentionally disabled in photobooth mode. */ }}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <canvas ref={canvasRef} hidden />
     </main>
   );
+
 }
 
 function readFileAsDataUrl(file: File) {
@@ -649,6 +788,17 @@ function writeSavedPrintsToStorage(prints: SavedPrintedPicture[]) {
   }
   window.localStorage.setItem(SAVED_PRINTS_STORAGE_KEY, JSON.stringify(prints.slice(0, 30)));
 }
+
+function readPrinterProfilesFromStorage(): PrinterProfile[] {
+  const raw = window.localStorage.getItem(PRINTER_PROFILES_STORAGE_KEY);
+  if (!raw) return [defaultPrinterProfile];
+  try { const parsed = JSON.parse(raw) as PrinterProfile[]; return Array.isArray(parsed) && parsed.length ? parsed : [defaultPrinterProfile]; } catch { return [defaultPrinterProfile]; }
+}
+function writePrinterProfilesToStorage(profiles: PrinterProfile[]) { window.localStorage.setItem(PRINTER_PROFILES_STORAGE_KEY, JSON.stringify(profiles.length ? profiles : [defaultPrinterProfile])); }
+function readDslrSettingsFromStorage(): DslrSettings { const raw = window.localStorage.getItem(DSLR_STORAGE_KEY); if (!raw) return defaultDslrSettings; try { return { ...defaultDslrSettings, ...JSON.parse(raw) as Partial<DslrSettings> }; } catch { return defaultDslrSettings; } }
+function writeDslrSettingsToStorage(settings: DslrSettings) { window.localStorage.setItem(DSLR_STORAGE_KEY, JSON.stringify(settings)); }
+function readCloudSyncSettingsFromStorage(): CloudSyncSettings { const raw = window.localStorage.getItem(CLOUD_SYNC_STORAGE_KEY); if (!raw) return defaultCloudSyncSettings; try { return { ...defaultCloudSyncSettings, ...JSON.parse(raw) as Partial<CloudSyncSettings> }; } catch { return defaultCloudSyncSettings; } }
+function writeCloudSyncSettingsToStorage(settings: CloudSyncSettings) { window.localStorage.setItem(CLOUD_SYNC_STORAGE_KEY, JSON.stringify(settings)); }
 
 function sanitizeFileName(value: string) {
   return value

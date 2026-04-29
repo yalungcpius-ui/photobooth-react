@@ -263,8 +263,8 @@ export function PrintEditor({ baseImageDataUrl, savedPrints, onSaveEditedPrint, 
                   <small>{new Date(print.createdAt).toLocaleString()}</small>
                   <div className="inline-actions wrap-actions">
                     <button type="button" onClick={() => {
-                      setFilter(print.filter ?? "none");
-                      setElements(structuredClone(print.elements ?? []));
+                      setFilter(print.filter);
+                      setElements(structuredClone(print.elements));
                       setSelectedId(null);
                       onLoadSavedPrint(print);
                     }}>Load</button>

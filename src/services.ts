@@ -33,7 +33,7 @@ export async function loadAdminStateFromFile(): Promise<AdminPersistenceState | 
 }
 
 export async function silentPrint(imageDataUrl: string, profile: PrinterProfile) {
-  if (!profile.silentPrint) {
+  if (!profile.silentPrinting) {
     browserPrint(imageDataUrl, profile.name);
     return 'Opened normal print dialog because silent printing is disabled for this profile.';
   }

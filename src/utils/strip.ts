@@ -75,6 +75,7 @@ export function normalizeBoothSettings(settings: BoothSettings): BoothSettings {
     ...settings,
     totalShots,
     countdownSeconds: clampInteger(settings.countdownSeconds, 1, 10),
+    printDecisionMode: settings.printDecisionMode === 'auto' ? 'auto' : 'ask',
     template: {
       ...settings.template,
       backgroundOpacity: clamp(settings.template.backgroundOpacity, 0, 1),
@@ -99,6 +100,7 @@ export async function composePhotoStrip(photos: CapturedPhoto[], options: Compos
   const layout = normalizeBoothSettings({
     totalShots: Math.max(photos.length, 1),
     countdownSeconds: 3,
+    printDecisionMode: 'ask',
     stripTitle: options.title,
     stripSubtitle: options.subtitle ?? '',
     template

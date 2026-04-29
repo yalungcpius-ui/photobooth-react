@@ -1,4 +1,4 @@
-const CACHE_NAME = 'photobooth-react-v1';
+const CACHE_NAME = 'photobooth-react-v2';
 const APP_SHELL = [
   '/photobooth-react/',
   '/photobooth-react/index.html',
@@ -23,11 +23,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first avoids old camera code being served forever during active development.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-      return response;
-    }).catch(() => caches.match('/photobooth-react/index.html')))
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/photobooth-react/index.html')))
   );
 });

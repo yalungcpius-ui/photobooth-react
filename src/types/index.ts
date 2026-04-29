@@ -1,4 +1,6 @@
 export type BoothStep = 'welcome' | 'preview' | 'countdown' | 'review' | 'edit-print';
+export type AppMode = 'configuration' | 'designer' | 'photobooth';
+export type PrintDecisionMode = 'ask' | 'auto';
 
 export interface LayoutRect {
   x: number;
@@ -75,6 +77,7 @@ export interface BoothTemplateSettings {
 export interface BoothSettings {
   totalShots: number;
   countdownSeconds: number;
+  printDecisionMode: PrintDecisionMode;
   stripTitle: string;
   stripSubtitle: string;
   template: BoothTemplateSettings;
@@ -127,56 +130,50 @@ export interface PrintEditElement {
   hidden: boolean;
 }
 
-export type PrinterProfile = {
-  id: string;
-  name: string;
-  printerName: string;
-  paperSize: string;
-  orientation: 'portrait' | 'landscape';
-  copies: number;
-  silentPrint: boolean;
-  autoSaveBeforePrint: boolean;
-};
-
-export type DslrSettings = {
-  enabled: boolean;
-  provider: 'none' | 'canon' | 'nikon' | 'sony' | 'generic';
-  connectionMode: 'usb' | 'wifi';
-  cameraName: string;
-  captureFolder: string;
-  watchFolder: string;
-  autoImportLatest: boolean;
-};
-
-export type CloudSyncSettings = {
-  enabled: boolean;
-  provider: 'none' | 'supabase' | 'firebase' | 'custom';
-  endpointUrl: string;
-  apiKey: string;
-  libraryId: string;
-  deviceId: string;
-  autoSyncPresets: boolean;
-  autoSyncGallery: boolean;
-  enablePrintUpload: boolean;
-};
-
-export type SavedPrintedPicture = {
+export interface SavedPrintedPicture {
   id: string;
   name: string;
   imageDataUrl: string;
-  baseImageDataUrl?: string;
+  baseImageDataUrl: string;
+  filter: PrintFilter;
+  elements: PrintEditElement[];
   createdAt: string;
-  templatePresetId?: string;
-  filter?: PrintFilter;
-  elements?: PrintEditElement[];
-};
+}
 
-export type AdminPersistenceState = {
+export interface PrinterProfile {
+  id: string;
+  name: string;
+  printerName: string;
+  paperSize: '4x6' | '5x7' | '6x4-strip' | 'custom';
+  orientation: 'portrait' | 'landscape';
+  copies: number;
+  silentPrinting: boolean;
+  autoSaveBeforePrint: boolean;
+}
+
+export interface DslrSettings {
+  enabled: boolean;
+  provider: 'none' | 'gphoto2' | 'canon-edsk' | 'sony-sdk' | 'watch-folder';
+  cameraName: string;
+  watchFolder: string;
+  autoImportLatest: boolean;
+}
+
+export interface CloudSyncSettings {
+  enabled: boolean;
+  endpointUrl: string;
+  apiKey: string;
+  deviceId: string;
+  autoSyncPresets: boolean;
+  enablePrintUpload: boolean;
+}
+
+export interface AdminPersistenceState {
   printerProfiles: PrinterProfile[];
-  selectedPrinterProfileId?: string | null;
+  selectedPrinterProfileId: string | null;
   dslrSettings: DslrSettings;
   cloudSyncSettings: CloudSyncSettings;
-  savedPrintedPictures: SavedPrintedPicture[];
-  presets: BoothTemplatePreset[];
-  updatedAt?: string;
-};
+  presets?: BoothTemplatePreset[];
+  savedPrints?: SavedPrintedPicture[];
+  updatedAt: string;
+}

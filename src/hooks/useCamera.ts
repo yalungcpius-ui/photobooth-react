@@ -3,6 +3,7 @@ import type { CameraDeviceOption } from '../types';
 
 interface UseCameraResult {
   isReady: boolean;
+  isStarting: boolean;
   error: string | null;
   devices: CameraDeviceOption[];
   selectedDeviceId: string;
@@ -16,36 +17,41 @@ interface UseCameraResult {
 
 function mapDevices(devices: MediaDeviceInfo[]): CameraDeviceOption[] {
   return devices
-      .filter((device) => device.kind === 'videoinput')
-      .map((device, index) => ({
-        deviceId: device.deviceId,
-        label: device.label || `Camera ${index + 1}`
-      }));
+    .filter((device) => device.kind === 'videoinput')
+    .map((device, index) => ({
+      deviceId: device.deviceId,
+      label: device.label || `Camera ${index + 1}`
+    }));
 }
 
 export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCameraResult {
   const [isReady, setIsReady] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<CameraDeviceOption[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const streamRef = useRef<MediaStream | null>(null);
+  const requestIdRef = useRef(0);
 
   const stopCamera = useCallback(() => {
+    requestIdRef.current += 1;
+
     streamRef.current?.getTracks().forEach((track: MediaStreamTrack) => {
       track.stop();
     });
-
     streamRef.current = null;
 
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.srcObject = null;
-      videoRef.current.onloadedmetadata = null;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+      video.onloadedmetadata = null;
     }
 
     setIsReady(false);
+    setIsStarting(false);
   }, [videoRef]);
 
   const refreshDevices = useCallback(async () => {
@@ -63,46 +69,91 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
   }, [selectedDeviceId]);
 
   const startCamera = useCallback(
-      async (deviceId = selectedDeviceId, mode = facingMode) => {
-        try {
-          setError(null);
-          setIsReady(false);
+    async (deviceId = selectedDeviceId, mode = facingMode) => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
 
-          stopCamera();
-
-          const mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: deviceId
-                ? { deviceId: { exact: deviceId } }
-                : { facingMode: mode },
-            audio: false
-          });
-
-          streamRef.current = mediaStream;
-
-          const video = videoRef.current;
-          if (!video) return;
-
-          video.srcObject = mediaStream;
-
-          video.onloadedmetadata = () => {
-            void video.play().then(() => {
-              setIsReady(true);
-              void refreshDevices();
-            }).catch((playError: unknown) => {
-              if (playError instanceof DOMException && playError.name === 'AbortError') {
-                return;
-              }
-
-              setError('Could not start camera preview.');
-              console.error('Video play failed:', playError);
-            });
-          };
-        } catch (cameraError) {
-          setError('Could not access the camera.');
-          console.error('Camera error:', cameraError);
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera access is not available in this browser.');
         }
-      },
-      [selectedDeviceId, facingMode, stopCamera, videoRef, refreshDevices]
+
+        setError(null);
+        setIsReady(false);
+        setIsStarting(true);
+
+        streamRef.current?.getTracks().forEach((track: MediaStreamTrack) => {
+          track.stop();
+        });
+        streamRef.current = null;
+
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: deviceId
+            ? {
+                deviceId: { exact: deviceId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              }
+            : {
+                facingMode: mode,
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
+          audio: false
+        });
+
+        if (requestId !== requestIdRef.current) {
+          mediaStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) {
+          mediaStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+          throw new Error('Video element is not ready yet.');
+        }
+
+        streamRef.current = mediaStream;
+        video.srcObject = mediaStream;
+
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 1) {
+            resolve();
+            return;
+          }
+          video.onloadedmetadata = () => resolve();
+        });
+
+        if (requestId !== requestIdRef.current) {
+          mediaStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+          return;
+        }
+
+        await video.play().catch((playError: unknown) => {
+          if (playError instanceof DOMException && playError.name === 'AbortError') {
+            return;
+          }
+          throw playError;
+        });
+
+        setIsReady(true);
+        setIsStarting(false);
+
+        const activeTrack = mediaStream.getVideoTracks()[0];
+        const activeDeviceId = activeTrack?.getSettings().deviceId;
+        if (activeDeviceId && !selectedDeviceId) {
+          setSelectedDeviceId(activeDeviceId);
+        }
+
+        void refreshDevices();
+      } catch (cameraError) {
+        const message = cameraError instanceof Error ? cameraError.message : 'Unable to access camera.';
+        setError(message);
+        setIsReady(false);
+        setIsStarting(false);
+      }
+    },
+    [facingMode, refreshDevices, selectedDeviceId, videoRef]
   );
 
   useEffect(() => {
@@ -117,6 +168,7 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
 
   return {
     isReady,
+    isStarting,
     error,
     devices,
     selectedDeviceId,

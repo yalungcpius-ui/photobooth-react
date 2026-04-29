@@ -240,3 +240,139 @@ New workflow:
 
 Saved prints are stored in browser `localStorage` and capped at the latest 30 prints. This is good for the MVP and kiosk testing. For production events, move saved prints to the Tauri filesystem, SQLite, or cloud storage so large image data is not limited by browser storage quotas.
 
+
+## Advanced event features added
+
+This version adds the production-facing foundations for:
+
+- QR code sharing from the saved prints gallery
+- A dedicated gallery/history screen for saved strips and edited pictures
+- Printer profiles with paper size, copies, auto-save, and silent-print intent
+- A Tauri command surface for Windows silent printing adapters
+- DSLR integration settings for watch-folder, gPhoto2, Canon EDSDK, or Sony SDK adapter workflows
+- Admin settings persistence to the Tauri app data folder with browser localStorage fallback
+- Cloud sync settings for preset libraries and optional print upload links
+
+### QR sharing
+
+The gallery/history screen can create a share link for each saved print. If a cloud endpoint is configured and `Upload prints for QR sharing` is enabled, the app will POST the print to:
+
+```text
+POST {endpointUrl}/prints
+```
+
+Expected response:
+
+```json
+{ "url": "https://your-gallery.example.com/print/abc123" }
+```
+
+If no cloud endpoint is configured, it falls back to a local hash URL and generates a QR code for that URL.
+
+### Cloud preset sync API contract
+
+The preset library sync buttons use:
+
+```text
+PUT {endpointUrl}/presets
+GET {endpointUrl}/presets?deviceId={deviceId}
+```
+
+Upload body:
+
+```json
+{
+  "deviceId": "booth-local",
+  "presets": []
+}
+```
+
+Download response:
+
+```json
+{
+  "presets": []
+}
+```
+
+If an API key is entered, the app sends it as:
+
+```text
+Authorization: Bearer {apiKey}
+```
+
+### Printer profiles and silent printing
+
+Browser/PWA mode always falls back to the normal print dialog. Silent printing requires the Windows Tauri app and a real adapter implementation in `src-tauri/src/lib.rs`.
+
+The current Tauri command is intentionally a safe stub:
+
+```rust
+silent_print_image(image_data_url, profile)
+```
+
+For production, wire this command to one of these approaches:
+
+- Windows print spooler / PowerShell print pipeline
+- vendor printer SDK
+- a small local print service
+- a kiosk environment with a trusted printer bridge
+
+### DSLR integration
+
+The app now includes DSLR admin settings and Tauri command stubs:
+
+```rust
+connect_dslr(settings)
+trigger_dslr_capture(settings)
+```
+
+Recommended production paths:
+
+- **Watch folder import**: easiest and most reliable; use the camera vendor app to drop images into a folder, then import newest file.
+- **gPhoto2 adapter**: good for supported cameras but needs native install/testing.
+- **Canon EDSDK / Sony SDK**: strongest vendor-specific approach but requires SDK setup and licensing review.
+
+### Admin settings persistence
+
+The admin panel has **Save admin file** and **Load admin file** buttons.
+
+- In Tauri/Windows, settings are saved under the app data directory.
+- In browser/PWA mode, it falls back to localStorage.
+
+This keeps the current app usable on iPad/tablet while still preparing for native Windows persistence.
+
+## Mobile-friendly camera start flow
+
+The camera now waits for a deliberate **Tap to Start Camera** action instead of starting automatically on page load. This is important for iPad, iPhone and Android browsers because camera playback is more reliable after a user gesture.
+
+The live preview also shows a loading overlay while `getUserMedia()` is resolving, then switches to the camera feed once `video.play()` succeeds. This avoids repeated camera restarts and reduces the browser warning: `The play() request was interrupted by a new load request`.
+
+## Production-readiness hooks
+
+The app includes admin settings and service hooks for:
+
+- Tauri silent printing profile flow
+- DSLR adapter settings and Tauri command stubs
+- Persistent admin settings through Tauri app data, with localStorage fallback
+- Cloud preset sync endpoint configuration
+- QR/event sharing backend contract in `server/README.md`
+
+Hardware-specific items still need real Windows printer and DSLR SDK testing on the target machine.
+
+## Updated workflow: configuration → designer → photobooth
+
+The app now separates the operator workflow into three screens:
+
+1. **Configuration** — load/import presets, set title/subtitle, shot count, countdown, kiosk settings, printer profiles and print behaviour.
+2. **Designer** — change the actual template layout, branding, background, photo slot sizing and reusable preset design.
+3. **Photobooth mode** — run the booth and test the capture flow. Layout editing is intentionally disabled here.
+
+After a photo session completes, the app opens the post-capture decoration editor. This screen locks the template layout and only allows finishing touches such as bubble text, plain text, emojis, icons and filters.
+
+### Print behaviour
+
+In Configuration, set **After decoration** to either:
+
+- **Ask to print** — the operator/guest manually chooses when to print.
+- **Auto print after save** — saving the decorated print triggers the selected printer profile automatically. In the browser/PWA this falls back to the normal print dialog; inside Tauri, the silent printing hook can be wired to a Windows printer.
