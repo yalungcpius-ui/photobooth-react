@@ -67,7 +67,7 @@ function App() {
 
   useEffect(() => {
     void startCamera();
-  }, [selectedDeviceId]);
+  }, [selectedDeviceId, facingMode]);
 
   useEffect(() => {
     writePresetsToStorage(presets);

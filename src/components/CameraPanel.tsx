@@ -59,7 +59,7 @@ export function CameraPanel({
       </div>
 
       <div className="video-shell">
-        <video ref={videoRef} muted playsInline className="camera-video" />
+        <video ref={videoRef} muted autoPlay playsInline className="camera-video" />
         {!isReady && !error ? <div className="status-badge">Starting camera…</div> : null}
         {error ? <div className="status-badge error">{error}</div> : null}
       </div>
