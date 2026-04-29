@@ -37,13 +37,14 @@ export function AdminIntegrationsPanel({
 
   const addProfile = () => {
     const profile: PrinterProfile = {
-      id: `printer-${Date.now()}`,
-      name: `Printer profile ${printerProfiles.length + 1}`,
+      id: crypto.randomUUID(),
+      name: `Printer Profile ${printerProfiles.length + 1}`,
       printerName: '',
       paperSize: '4x6',
+      orientation: 'portrait',
       copies: 1,
-      silentPrinting: false,
-      autoSaveBeforePrint: true
+      silentPrint: false,
+      autoSaveBeforePrint: true,
     };
     onPrinterProfilesChange([...printerProfiles, profile]);
     onSelectedPrinterProfileChange(profile.id);
@@ -63,6 +64,7 @@ export function AdminIntegrationsPanel({
       dslrSettings,
       cloudSyncSettings,
       presets,
+      savedPrintedPictures: [],
       updatedAt: new Date().toISOString()
     });
     setStatus(result);
@@ -106,7 +108,7 @@ export function AdminIntegrationsPanel({
             <div className="settings-grid three-columns">
               <label className="field-group">Paper<select value={selectedProfile.paperSize} onChange={(event) => updateSelectedProfile({ paperSize: event.target.value as PrinterProfile['paperSize'] })}><option value="4x6">4x6</option><option value="5x7">5x7</option><option value="6x4-strip">6x4 strip</option><option value="custom">Custom</option></select></label>
               <label className="field-group">Copies<input type="number" min={1} max={10} value={selectedProfile.copies} onChange={(event) => updateSelectedProfile({ copies: Math.max(1, Number(event.target.value) || 1) })} /></label>
-              <label className="field-group checkbox-row"><input type="checkbox" checked={selectedProfile.silentPrinting} onChange={(event) => updateSelectedProfile({ silentPrinting: event.target.checked })} />Silent</label>
+              <label className="field-group checkbox-row"><input type="checkbox" checked={selectedProfile.silentPrint} onChange={(event) => updateSelectedProfile({ silentPrint: event.target.checked })} />Silent</label>
             </div>
             <label className="field-group checkbox-row"><input type="checkbox" checked={selectedProfile.autoSaveBeforePrint} onChange={(event) => updateSelectedProfile({ autoSaveBeforePrint: event.target.checked })} />Auto-save before printing</label>
           </> : null}

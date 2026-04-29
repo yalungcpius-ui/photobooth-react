@@ -127,12 +127,56 @@ export interface PrintEditElement {
   hidden: boolean;
 }
 
-export interface SavedPrintedPicture {
+export type PrinterProfile = {
+  id: string;
+  name: string;
+  printerName: string;
+  paperSize: string;
+  orientation: 'portrait' | 'landscape';
+  copies: number;
+  silentPrint: boolean;
+  autoSaveBeforePrint: boolean;
+};
+
+export type DslrSettings = {
+  enabled: boolean;
+  provider: 'none' | 'canon' | 'nikon' | 'sony' | 'generic';
+  connectionMode: 'usb' | 'wifi';
+  cameraName: string;
+  captureFolder: string;
+  watchFolder: string;
+  autoImportLatest: boolean;
+};
+
+export type CloudSyncSettings = {
+  enabled: boolean;
+  provider: 'none' | 'supabase' | 'firebase' | 'custom';
+  endpointUrl: string;
+  apiKey: string;
+  libraryId: string;
+  deviceId: string;
+  autoSyncPresets: boolean;
+  autoSyncGallery: boolean;
+  enablePrintUpload: boolean;
+};
+
+export type SavedPrintedPicture = {
   id: string;
   name: string;
   imageDataUrl: string;
-  baseImageDataUrl: string;
-  filter: PrintFilter;
-  elements: PrintEditElement[];
+  baseImageDataUrl?: string;
   createdAt: string;
-}
+  templatePresetId?: string;
+  filter?: PrintFilter;
+  elements?: PrintEditElement[];
+};
+
+export type AdminPersistenceState = {
+  printerProfiles: PrinterProfile[];
+  selectedPrinterProfileId?: string | null;
+  dslrSettings: DslrSettings;
+  cloudSyncSettings: CloudSyncSettings;
+  savedPrintedPictures: SavedPrintedPicture[];
+  presets: BoothTemplatePreset[];
+  updatedAt?: string;
+};
