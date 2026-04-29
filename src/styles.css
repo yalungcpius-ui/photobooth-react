@@ -895,3 +895,177 @@ button:disabled {
   pointer-events: none;
   z-index: 18;
 }
+
+/* Kiosk, phone and tablet upgrades */
+html {
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+button,
+.button-like,
+select,
+input {
+  min-height: 46px;
+}
+
+.camera-source-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kiosk-mode {
+  min-height: 100dvh;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+}
+
+.kiosk-mode .app-header {
+  margin-bottom: 14px;
+}
+
+.kiosk-mode .eyebrow,
+.kiosk-mode .controls-panel {
+  display: none;
+}
+
+.kiosk-mode .app-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  align-items: stretch;
+}
+
+.kiosk-mode .camera-panel,
+.kiosk-mode .video-shell {
+  height: 100%;
+}
+
+.kiosk-mode .camera-panel .panel-row,
+.kiosk-mode .camera-panel .field-group,
+.kiosk-mode .camera-panel .camera-source-grid,
+.kiosk-mode .camera-panel .helper-text {
+  display: none;
+}
+
+.kiosk-actions-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.kiosk-start-button {
+  min-height: 76px;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  border-radius: 24px;
+}
+
+.admin-exit-button {
+  min-height: 44px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  button,
+  .button-like,
+  input,
+  select {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+
+  .resize-handle {
+    width: 28px;
+    height: 28px;
+    right: -14px;
+    bottom: -14px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .app-shell {
+    padding: 20px;
+  }
+
+  .app-grid,
+  .kiosk-mode .app-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .right-column {
+    order: 2;
+  }
+
+  .left-column {
+    order: 1;
+  }
+
+  .camera-source-grid,
+  .settings-grid.three-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .app-header,
+  .panel-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-header h1 {
+    font-size: 1.55rem;
+  }
+
+  .header-status,
+  .inline-actions,
+  .wrap-actions {
+    width: 100%;
+  }
+
+  .header-status > *,
+  .inline-actions > *,
+  .wrap-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .stats-row,
+  .settings-grid,
+  .settings-grid.three-columns,
+  .camera-source-grid,
+  .two-columns,
+  .preset-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .video-shell {
+    aspect-ratio: 3 / 4;
+  }
+
+  .kiosk-mode .video-shell {
+    aspect-ratio: 4 / 5;
+    min-height: 55dvh;
+  }
+
+  .kiosk-mode .app-header h1 {
+    font-size: 1.25rem;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .kiosk-mode .app-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
+  }
+
+  .kiosk-mode .video-shell {
+    min-height: 68dvh;
+  }
+}

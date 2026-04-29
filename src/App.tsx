@@ -5,11 +5,20 @@ import { CountdownOverlay } from './components/CountdownOverlay';
 import { PhotoStrip } from './components/PhotoStrip';
 import { useCamera } from './hooks/useCamera';
 import { useCountdown } from './hooks/useCountdown';
-import type { BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto } from './types';
+import type { BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset, CapturedPhoto } from './types';
 import { captureFrame, downloadDataUrl } from './utils/capture';
 import { composePhotoStrip, createDefaultTemplateLayout, normalizeBoothSettings } from './utils/strip';
 
 const PRESET_STORAGE_KEY = 'photobooth-template-presets-v1';
+const KIOSK_STORAGE_KEY = 'photobooth-kiosk-settings-v1';
+
+const defaultKioskSettings: BoothKioskSettings = {
+  enabled: false,
+  adminPin: '1234',
+  idleResetSeconds: 30,
+  autoReturnToCapture: true,
+  allowGuestRetake: true
+};
 
 const defaultSettings: BoothSettings = {
   totalShots: 4,
@@ -41,13 +50,15 @@ function App() {
   const [settings, setSettings] = useState<BoothSettings>(() => normalizeBoothSettings(defaultSettings));
   const [presets, setPresets] = useState<BoothTemplatePreset[]>(() => readPresetsFromStorage());
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [kioskSettings, setKioskSettings] = useState<BoothKioskSettings>(() => readKioskSettingsFromStorage());
+  const [isKioskMode, setIsKioskMode] = useState(() => readKioskSettingsFromStorage().enabled);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [stripDataUrl, setStripDataUrl] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const { isReady, error, devices, selectedDeviceId, setSelectedDeviceId, refreshDevices, startCamera } = useCamera(videoRef);
+  const { isReady, error, devices, selectedDeviceId, facingMode, setSelectedDeviceId, setFacingMode, refreshDevices, startCamera } = useCamera(videoRef);
   const { countdown, startCountdown, clearCountdown } = useCountdown();
 
   useEffect(() => {
@@ -57,6 +68,10 @@ function App() {
   useEffect(() => {
     writePresetsToStorage(presets);
   }, [presets]);
+
+  useEffect(() => {
+    writeKioskSettingsToStorage(kioskSettings);
+  }, [kioskSettings]);
 
   const shotsRemaining = useMemo(() => Math.max(settings.totalShots - photos.length, 0), [photos.length, settings.totalShots]);
 
@@ -151,6 +166,18 @@ function App() {
     };
   }, [photos, settings]);
 
+  useEffect(() => {
+    if (!isKioskMode || !kioskSettings.autoReturnToCapture || step !== 'review') {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      resetSession();
+    }, kioskSettings.idleResetSeconds * 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [isKioskMode, kioskSettings.autoReturnToCapture, kioskSettings.idleResetSeconds, step]);
+
   const handleDeviceChange = async (deviceId: string) => {
     setSelectedDeviceId(deviceId);
     await startCamera(deviceId);
@@ -159,6 +186,12 @@ function App() {
   const handleRefreshDevices = async () => {
     await refreshDevices();
     await startCamera(selectedDeviceId);
+  };
+
+  const handleFacingModeChange = async (mode: 'user' | 'environment') => {
+    setSelectedDeviceId('');
+    setFacingMode(mode);
+    await startCamera('', mode);
   };
 
   const handleTemplateImageUpload = async (file: File | null) => {
@@ -279,6 +312,35 @@ function App() {
     await downloadDataUrl(stripDataUrl, 'photobooth-strip.png');
   };
 
+  const updateKioskSettings = (next: BoothKioskSettings) => {
+    setKioskSettings(next);
+    if (!next.enabled && isKioskMode) {
+      setIsKioskMode(false);
+      void document.exitFullscreen?.();
+    }
+  };
+
+  const enterKioskMode = async () => {
+    const next = { ...kioskSettings, enabled: true };
+    setKioskSettings(next);
+    setIsKioskMode(true);
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      // Browser/iPad Safari may require a direct user gesture or installed PWA mode.
+    }
+  };
+
+  const exitKioskMode = () => {
+    const enteredPin = window.prompt('Enter admin PIN to exit kiosk mode');
+    if (enteredPin !== kioskSettings.adminPin) {
+      return;
+    }
+    setKioskSettings((current) => ({ ...current, enabled: false }));
+    setIsKioskMode(false);
+    void document.exitFullscreen?.();
+  };
+
   const printStrip = () => {
     if (!stripDataUrl || isPrinting) {
       return;
@@ -319,7 +381,7 @@ function App() {
   };
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${isKioskMode ? 'kiosk-mode' : ''}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">React + Tauri starter</p>
@@ -328,6 +390,11 @@ function App() {
         <div className="header-status">
           <span className={`pill ${isReady ? 'live' : ''}`}>{isReady ? 'Camera ready' : 'Camera starting'}</span>
           <span className="pill">{shotsRemaining} shots remaining</span>
+          {isKioskMode ? (
+            <button type="button" className="ghost-button admin-exit-button" onClick={exitKioskMode}>
+              Admin unlock
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -339,7 +406,9 @@ function App() {
             error={error}
             devices={devices}
             selectedDeviceId={selectedDeviceId}
+            facingMode={facingMode}
             onDeviceChange={handleDeviceChange}
+            onFacingModeChange={handleFacingModeChange}
             onRefreshDevices={handleRefreshDevices}
           />
           <CountdownOverlay value={countdown} />
@@ -368,7 +437,24 @@ function App() {
               void importPreset(file);
             }}
             onResetTemplateDefaults={resetTemplateDefaults}
+            kioskSettings={kioskSettings}
+            isKioskMode={isKioskMode}
+            onKioskSettingsChange={updateKioskSettings}
+            onEnterKioskMode={enterKioskMode}
+            onExitKioskMode={exitKioskMode}
           />
+          {isKioskMode ? (
+            <section className="panel kiosk-actions-panel">
+              <button className="primary kiosk-start-button" onClick={triggerCaptureSequence} disabled={!isReady || step === 'countdown'}>
+                {step === 'review' ? 'Take another set' : 'Tap to start'}
+              </button>
+              {kioskSettings.allowGuestRetake ? (
+                <button onClick={resetSession} disabled={photos.length === 0 && step !== 'review'}>
+                  Retake
+                </button>
+              ) : null}
+            </section>
+          ) : null}
           <PhotoStrip
             title={settings.stripTitle}
             subtitle={settings.stripSubtitle}
@@ -431,6 +517,40 @@ function writePresetsToStorage(presets: BoothTemplatePreset[]) {
     return;
   }
   window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function readKioskSettingsFromStorage(): BoothKioskSettings {
+  if (typeof window === 'undefined') {
+    return defaultKioskSettings;
+  }
+
+  const raw = window.localStorage.getItem(KIOSK_STORAGE_KEY);
+  if (!raw) {
+    return defaultKioskSettings;
+  }
+
+  try {
+    return normalizeKioskSettings(JSON.parse(raw) as Partial<BoothKioskSettings>);
+  } catch {
+    return defaultKioskSettings;
+  }
+}
+
+function writeKioskSettingsToStorage(settings: BoothKioskSettings) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(normalizeKioskSettings(settings)));
+}
+
+function normalizeKioskSettings(settings: Partial<BoothKioskSettings>): BoothKioskSettings {
+  return {
+    enabled: Boolean(settings.enabled),
+    adminPin: String(settings.adminPin || defaultKioskSettings.adminPin).slice(0, 12),
+    idleResetSeconds: Math.max(10, Math.min(300, Number(settings.idleResetSeconds) || defaultKioskSettings.idleResetSeconds)),
+    autoReturnToCapture: settings.autoReturnToCapture ?? defaultKioskSettings.autoReturnToCapture,
+    allowGuestRetake: settings.allowGuestRetake ?? defaultKioskSettings.allowGuestRetake
+  };
 }
 
 function sanitizeFileName(value: string) {

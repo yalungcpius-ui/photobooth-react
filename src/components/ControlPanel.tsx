@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { BoothSettings, BoothStep, BoothTemplatePreset } from '../types';
+import type { BoothKioskSettings, BoothSettings, BoothStep, BoothTemplatePreset } from '../types';
 
 interface ControlPanelProps {
   step: BoothStep;
@@ -21,6 +21,11 @@ interface ControlPanelProps {
   onExportPreset: (presetId: string) => void;
   onImportPreset: (file: File | null) => void;
   onResetTemplateDefaults: () => void;
+  kioskSettings: BoothKioskSettings;
+  isKioskMode: boolean;
+  onKioskSettingsChange: (next: BoothKioskSettings) => void;
+  onEnterKioskMode: () => void;
+  onExitKioskMode: () => void;
 }
 
 export function ControlPanel({
@@ -42,7 +47,12 @@ export function ControlPanel({
   onDeletePreset,
   onExportPreset,
   onImportPreset,
-  onResetTemplateDefaults
+  onResetTemplateDefaults,
+  kioskSettings,
+  isKioskMode,
+  onKioskSettingsChange,
+  onEnterKioskMode,
+  onExitKioskMode
 }: ControlPanelProps) {
   const disableSettings = step === 'countdown';
   const { template } = settings;
@@ -62,6 +72,13 @@ export function ControlPanel({
         ...template,
         [key]: value
       }
+    });
+  };
+
+  const updateKiosk = <K extends keyof BoothKioskSettings>(key: K, value: BoothKioskSettings[K]) => {
+    onKioskSettingsChange({
+      ...kioskSettings,
+      [key]: value
     });
   };
 
@@ -373,6 +390,64 @@ export function ControlPanel({
             <option value="square">Square</option>
           </select>
         </label>
+      </div>
+
+      <div className="section-divider">
+        <h3>Kiosk + touch mode</h3>
+      </div>
+
+      <div className="settings-grid three-columns">
+        <label className="field-group">
+          Admin PIN
+          <input
+            value={kioskSettings.adminPin}
+            inputMode="numeric"
+            maxLength={12}
+            disabled={disableSettings}
+            onChange={(event) => updateKiosk('adminPin', event.target.value.replace(/\D/g, '').slice(0, 12))}
+          />
+        </label>
+
+        <label className="field-group">
+          Idle reset seconds
+          <input
+            type="number"
+            min={10}
+            max={300}
+            value={kioskSettings.idleResetSeconds}
+            disabled={disableSettings}
+            onChange={(event) => updateKiosk('idleResetSeconds', Math.max(10, Math.min(300, Number(event.target.value) || 30)))}
+          />
+        </label>
+
+        <label className="field-group checkbox-row">
+          <input
+            type="checkbox"
+            checked={kioskSettings.allowGuestRetake}
+            disabled={disableSettings}
+            onChange={(event) => updateKiosk('allowGuestRetake', event.target.checked)}
+          />
+          Guest retake
+        </label>
+      </div>
+
+      <label className="field-group checkbox-row">
+        <input
+          type="checkbox"
+          checked={kioskSettings.autoReturnToCapture}
+          disabled={disableSettings}
+          onChange={(event) => updateKiosk('autoReturnToCapture', event.target.checked)}
+        />
+        Auto-return to capture screen after each session
+      </label>
+
+      <div className="inline-actions wrap-actions">
+        <button type="button" className="primary" onClick={onEnterKioskMode} disabled={step === 'countdown'}>
+          Enter kiosk mode
+        </button>
+        <button type="button" onClick={onExitKioskMode} disabled={!isKioskMode}>
+          Exit kiosk mode
+        </button>
       </div>
 
       <div className="button-stack">

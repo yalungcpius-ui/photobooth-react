@@ -6,9 +6,11 @@ interface UseCameraResult {
   error: string | null;
   devices: CameraDeviceOption[];
   selectedDeviceId: string;
+  facingMode: 'user' | 'environment';
   setSelectedDeviceId: (deviceId: string) => void;
+  setFacingMode: (mode: 'user' | 'environment') => void;
   refreshDevices: () => Promise<void>;
-  startCamera: (deviceId?: string) => Promise<void>;
+  startCamera: (deviceId?: string, mode?: 'user' | 'environment') => Promise<void>;
   stopCamera: () => void;
 }
 
@@ -27,6 +29,7 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<CameraDeviceOption[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const stopCamera = useCallback(() => {
     stream?.getTracks().forEach((track) => track.stop());
@@ -52,12 +55,13 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
   }, [selectedDeviceId]);
 
   const startCamera = useCallback(
-    async (overrideDeviceId?: string) => {
+    async (overrideDeviceId?: string, overrideFacingMode?: 'user' | 'environment') => {
       try {
         setError(null);
         stopCamera();
 
         const resolvedDeviceId = overrideDeviceId || selectedDeviceId;
+        const resolvedFacingMode = overrideFacingMode || facingMode;
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: resolvedDeviceId
@@ -66,8 +70,9 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
               }
+
             : {
-                facingMode: 'user',
+                facingMode: resolvedFacingMode,
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
               }
@@ -100,7 +105,7 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
         setIsReady(false);
       }
     },
-    [refreshDevices, selectedDeviceId, stopCamera, videoRef]
+    [facingMode, refreshDevices, selectedDeviceId, stopCamera, videoRef]
   );
 
   useEffect(() => {
@@ -116,7 +121,9 @@ export function useCamera(videoRef: RefObject<HTMLVideoElement | null>): UseCame
     error,
     devices,
     selectedDeviceId,
+    facingMode,
     setSelectedDeviceId,
+    setFacingMode,
     refreshDevices,
     startCamera,
     stopCamera

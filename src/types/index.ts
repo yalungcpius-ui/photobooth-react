@@ -80,6 +80,14 @@ export interface BoothSettings {
   template: BoothTemplateSettings;
 }
 
+export interface BoothKioskSettings {
+  enabled: boolean;
+  adminPin: string;
+  idleResetSeconds: number;
+  autoReturnToCapture: boolean;
+  allowGuestRetake: boolean;
+}
+
 export interface BoothTemplatePreset {
   id: string;
   name: string;

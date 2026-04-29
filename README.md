@@ -88,6 +88,68 @@ Users can now:
 - **Arrow keys**: nudge selected elements
 - **Shift + Arrow keys**: larger nudge step
 
+
+## Live web demo with GitHub Pages
+
+This repo includes a GitHub Actions workflow at `.github/workflows/pages.yml`.
+
+After pushing to GitHub:
+
+1. Open the GitHub repo.
+2. Go to **Settings → Pages**.
+3. Set **Source** to **GitHub Actions**.
+4. Push to `main`, or manually run the **Deploy web demo** workflow.
+
+The demo URL will be:
+
+```text
+https://yalungcpius-ui.github.io/photobooth-react/
+```
+
+You can also test the same web build locally:
+
+```bash
+npm run build:web
+npm run preview
+```
+
+## Build Windows installer with Tauri
+
+### Local Windows build
+
+Run this on your Windows machine:
+
+```bash
+npm install
+npm run tauri:build
+```
+
+The installer output will be under:
+
+```text
+src-tauri/target/release/bundle/
+```
+
+### GitHub Actions Windows build
+
+This repo includes `.github/workflows/windows-installer.yml`.
+
+You can run it manually from GitHub:
+
+1. Open the repo on GitHub.
+2. Go to **Actions**.
+3. Choose **Build Windows installer**.
+4. Click **Run workflow**.
+
+Or create a release build by pushing a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow creates a draft GitHub release with the Windows installer files.
+
 ## Suggested next steps
 
 - Add QR code sharing
@@ -101,9 +163,9 @@ Users can now:
 
 ```bash
 git add .
-git commit -m "Add template preset save/load import/export"
+git commit -m "Add GitHub Pages demo and Windows installer workflow"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/photobooth-react.git
+git remote set-url origin https://github.com/yalungcpius-ui/photobooth-react.git
 git push -u origin main
 ```
 
@@ -112,3 +174,49 @@ Or with GitHub CLI:
 ```bash
 gh repo create photobooth-react --public --source=. --remote=origin --push
 ```
+
+## Kiosk mode and phone/tablet support
+
+This version adds a practical event/kiosk flow:
+
+- **Enter kiosk mode** from the Session & Template panel
+- Kiosk mode hides the editing controls and shows guest-friendly capture buttons
+- **Admin PIN** is required to leave kiosk mode
+- Optional guest retake button
+- Optional idle auto-reset after a review screen
+- Fullscreen request on supported desktop/mobile browsers
+- Touch-friendly controls and larger resize handles
+- Responsive layouts for phones, iPads, Android tablets, and small laptop screens
+- Front/rear camera selector for mobile devices
+
+### iPad, iPhone, Android phone and Android tablet usage
+
+For mobile and tablet devices, the easiest route is the **web/PWA version**:
+
+1. Publish the GitHub Pages demo.
+2. Open it on the device browser.
+3. Allow camera access.
+4. Add it to the home screen for a more app-like kiosk experience.
+5. Open the installed icon and use **Enter kiosk mode**.
+
+Notes:
+
+- iOS/iPadOS camera access requires HTTPS, so the GitHub Pages URL is suitable.
+- iPad Safari may not allow every fullscreen behavior unless the app is launched from the home screen.
+- Tauri v2 supports Android and iOS targets from the same web frontend, but native mobile builds still require platform SDK setup such as Android Studio or Xcode.
+
+### Native mobile direction later
+
+The current project is ready for:
+
+- Windows desktop with Tauri
+- Web demo / PWA for iPad, iPhone, Android tablets and phones
+
+A later native mobile pass can add:
+
+```bash
+npm run tauri android init
+npm run tauri ios init
+```
+
+That requires local Android/iOS tooling and should be done after the web/PWA version is stable.
